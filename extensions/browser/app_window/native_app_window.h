@@ -31,6 +31,8 @@ class NativeAppWindow : public ui::BaseWindow,
   // |fullscreen_types| is a bit field of AppWindow::FullscreenType.
   virtual void SetFullscreen(int fullscreen_types) = 0;
 
+  virtual void SetResizable(bool flag) = 0;
+  virtual bool IsResizable() const = 0;
   // Returns whether the window is fullscreen or about to enter fullscreen.
   virtual bool IsFullscreenOrPending() const = 0;
 

@@ -271,6 +271,8 @@
 #include "chrome/browser/usb/web_usb_permission_provider.h"
 #endif
 
+#include "content/nw/src/common/shell_switches.h"
+
 using base::FileDescriptor;
 using blink::WebWindowFeatures;
 using content::AccessTokenStore;
@@ -467,7 +469,7 @@ breakpad::CrashHandlerHostLinux* CreateCrashHandlerHost(
   PathService::Get(chrome::DIR_CRASH_DUMPS, &dumps_path);
   {
     ANNOTATE_SCOPED_MEMORY_LEAK;
-    bool upload = (getenv(env_vars::kHeadless) == NULL);
+    bool upload = false;
     breakpad::CrashHandlerHostLinux* crash_handler =
         new breakpad::CrashHandlerHostLinux(process_type, dumps_path, upload);
     crash_handler->StartUploaderThread();
@@ -565,10 +567,12 @@ class SafeBrowsingSSLCertReporter : public SSLCertReporter {
   // SSLCertReporter implementation
   void ReportInvalidCertificateChain(
       const std::string& serialized_report) override {
+#if 0
     if (safe_browsing_ui_manager_) {
       safe_browsing_ui_manager_->ReportInvalidCertificateChain(
           serialized_report, base::Bind(&base::DoNothing));
     }
+#endif
   }
 
  private:
@@ -1118,6 +1122,8 @@ bool ChromeContentBrowserClient::MayReuseHost(
 
 bool ChromeContentBrowserClient::ShouldTryToUseExistingProcessHost(
     content::BrowserContext* browser_context, const GURL& url) {
+  return true;
+#if 0
   // It has to be a valid URL for us to check for an extension.
   if (!url.is_valid())
     return false;
@@ -1129,6 +1135,7 @@ bool ChromeContentBrowserClient::ShouldTryToUseExistingProcessHost(
           profile, url);
 #else
   return false;
+#endif
 #endif
 }
 
@@ -1385,6 +1392,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 #endif
 
   if (process_type == switches::kRendererProcess) {
+    command_line->AppendSwitch(switches::kNWJS);
+
     content::RenderProcessHost* process =
         content::RenderProcessHost::FromID(child_process_id);
     Profile* profile =
@@ -1496,6 +1505,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
       autofill::switches::kDisableAccessorySuggestionView,
       autofill::switches::kEnableAccessorySuggestionView,
 #endif
+      switches::kEnableSpellChecking,
       autofill::switches::kDisableFillOnAccountSelect,
       autofill::switches::kDisablePasswordGeneration,
       autofill::switches::kEnableFillOnAccountSelect,
@@ -1943,12 +1953,8 @@ void ChromeContentBrowserClient::AllowCertificateError(
   if (expired_previous_decision)
     options_mask |= SSLBlockingPage::EXPIRED_BUT_PREVIOUSLY_ALLOWED;
 
-  SafeBrowsingService* safe_browsing_service =
-      g_browser_process->safe_browsing_service();
   scoped_ptr<SafeBrowsingSSLCertReporter> cert_reporter(
-      new SafeBrowsingSSLCertReporter(safe_browsing_service
-                                          ? safe_browsing_service->ui_manager()
-                                          : nullptr));
+      new SafeBrowsingSSLCertReporter(nullptr));
   SSLErrorHandler::HandleSSLError(tab, cert_error, ssl_info, request_url,
                                   options_mask, cert_reporter.Pass(), callback);
 }

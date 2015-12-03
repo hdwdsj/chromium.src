@@ -106,6 +106,7 @@ class Dispatcher : public content::RenderProcessObserver,
       const GURL& url);
 
   void DidCreateDocumentElement(blink::WebLocalFrame* frame);
+  void DidFinishDocumentLoad(blink::WebLocalFrame* frame);
 
   void OnExtensionResponse(int request_id,
                            bool success,

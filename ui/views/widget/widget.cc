@@ -1036,6 +1036,10 @@ bool Widget::CanActivate() const {
   return widget_delegate_->CanActivate();
 }
 
+bool Widget::NWCanClose() const {
+  return widget_delegate_->NWCanClose();
+}
+
 bool Widget::IsInactiveRenderingDisabled() const {
   return disable_inactive_rendering_;
 }

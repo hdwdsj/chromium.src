@@ -10,7 +10,6 @@
 #include "base/command_line.h"
 #include "base/containers/scoped_ptr_map.h"
 #include "base/debug/alias.h"
-#include "base/lazy_instance.h"
 #include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
@@ -109,6 +108,13 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "v8/include/v8.h"
 
+#include "base/files/file_util.h"
+#include "content/common/dom_storage/dom_storage_map.h"
+#include "content/nw/src/nw_content.h"
+#include "content/nw/src/nw_custom_bindings.h"
+#include "third_party/node/src/node_webkit.h"
+#include "third_party/WebKit/public/web/WebScopedMicrotaskSuppression.h"
+
 using base::UserMetricsAction;
 using blink::WebDataSource;
 using blink::WebDocument;
@@ -118,6 +124,9 @@ using blink::WebString;
 using blink::WebVector;
 using blink::WebView;
 using content::RenderThread;
+
+UVRunFn g_uv_run_fn = nullptr;
+SetUVRunFn g_set_uv_run_fn = nullptr;
 
 namespace extensions {
 
@@ -138,9 +147,9 @@ void CrashOnException(const v8::TryCatch& trycatch) {
 //
 // Note that this isn't necessarily an object, since webpages can write, for
 // example, "window.chrome = true".
-v8::Local<v8::Value> GetOrCreateChrome(ScriptContext* context) {
+v8::Local<v8::Value> GetOrCreateChrome(ScriptContext* context, const char* name = nullptr) {
   v8::Local<v8::String> chrome_string(
-      v8::String::NewFromUtf8(context->isolate(), "chrome"));
+       v8::String::NewFromUtf8(context->isolate(), name ? name : "chrome"));
   v8::Local<v8::Object> global(context->v8_context()->Global());
   v8::Local<v8::Value> chrome(global->Get(chrome_string));
   if (chrome->IsUndefined()) {
@@ -195,6 +204,11 @@ class ChromeNativeHandler : public ObjectBackedNativeHandler {
 
 base::LazyInstance<WorkerScriptContextSet> g_worker_script_context_set =
     LAZY_INSTANCE_INITIALIZER;
+
+int nw_uv_run(void* loop, int mode) {
+  blink::WebScopedMicrotaskSuppression suppression;
+  return g_uv_run_fn(loop, mode);
+}
 
 }  // namespace
 
@@ -278,13 +292,20 @@ void Dispatcher::DidCreateScriptContext(
     v8::Local<v8::Object> chrome = AsObjectOrEmpty(GetOrCreateChrome(context));
     if (!chrome.IsEmpty())
       module_system->SetLazyField(chrome, "Event", kEventBindings, "Event");
+
+    if (context->extension()->GetType() == Manifest::TYPE_NWJS_APP &&
+        context->context_type() == Feature::BLESSED_EXTENSION_CONTEXT) {
+
+      nw::ContextCreationHook(frame, context);
+    }
   }
 
   UpdateBindingsForContext(context);
 
   bool is_within_platform_app = IsWithinPlatformApp();
   // Inject custom JS into the platform app context.
-  if (is_within_platform_app) {
+  if (is_within_platform_app && context->extension() &&
+      context->extension()->GetType() != Manifest::TYPE_NWJS_APP) {
     module_system->Require("platformApp");
   }
 
@@ -427,6 +448,13 @@ void Dispatcher::WillReleaseScriptContext(
   if (!context)
     return;
 
+  //FIXME: upstream removed unload_event: we should check our event
+  //f66545e9e5d0308c15f51764e311425894e3ad09
+  
+  if (context && context->extension() && context->extension()->is_nwjs_app()) {
+    nw::OnRenderProcessShutdownHook(context);
+  }
+
   // TODO(kalman): Make |request_sender| use |context->AddInvalidationObserver|.
   // In fact |request_sender_| should really be owned by ScriptContext.
   request_sender_->InvalidateSource(context);
@@ -446,6 +474,19 @@ void Dispatcher::WillDestroyServiceWorkerContextOnWorkerThread(
   }
 }
 
+void Dispatcher::DidFinishDocumentLoad(blink::WebLocalFrame* frame) {
+  GURL effective_document_url = ScriptContext::GetEffectiveDocumentURL(
+      frame, frame->document().url(), true /* match_about_blank */);
+
+  const Extension* extension =
+    RendererExtensionRegistry::Get()->GetExtensionOrAppByURL(effective_document_url);
+
+  if (extension &&
+      (extension->is_extension() || extension->is_platform_app())) {
+    nw::DocumentFinishHook(frame, extension, effective_document_url);
+  }
+}
+
 void Dispatcher::DidCreateDocumentElement(blink::WebLocalFrame* frame) {
   // Note: use GetEffectiveDocumentURL not just frame->document()->url()
   // so that this also injects the stylesheet on about:blank frames that
@@ -459,6 +500,7 @@ void Dispatcher::DidCreateDocumentElement(blink::WebLocalFrame* frame) {
 
   if (extension &&
       (extension->is_extension() || extension->is_platform_app())) {
+    nw::DocumentElementHook(frame, extension, effective_document_url);
     int resource_id = extension->is_platform_app() ? IDR_PLATFORM_APP_CSS
                                                    : IDR_EXTENSION_FONTS_CSS;
     std::string stylesheet = ResourceBundle::GetSharedInstance()
@@ -731,6 +773,16 @@ std::vector<std::pair<std::string, int> > Dispatcher::GetJsResources() {
       std::make_pair("media_router_bindings", IDR_MEDIA_ROUTER_BINDINGS_JS));
 #endif  // defined(ENABLE_MEDIA_ROUTER)
 
+  resources.push_back(std::make_pair("nw.App",       IDR_NWAPI_APP_JS));
+  resources.push_back(std::make_pair("nw.Window",    IDR_NWAPI_WINDOW_JS));
+  resources.push_back(std::make_pair("nw.Clipboard", IDR_NWAPI_CLIPBOARD_JS));
+  resources.push_back(std::make_pair("nw.Menu",      IDR_NWAPI_MENU_JS));
+  resources.push_back(std::make_pair("nw.Screen",    IDR_NWAPI_SCREEN_JS));
+  resources.push_back(std::make_pair("nw.Shell",     IDR_NWAPI_SHELL_JS));
+  resources.push_back(std::make_pair("nw.Shortcut",  IDR_NWAPI_SHORTCUT_JS));
+  resources.push_back(std::make_pair("nw.Object",    IDR_NWAPI_OBJECT_JS));
+  resources.push_back(std::make_pair("nw.test",      IDR_NWAPI_TEST_JS));
+  resources.push_back(std::make_pair("nw.Tray",      IDR_NWAPI_TRAY_JS));
   return resources;
 }
 
@@ -825,6 +877,9 @@ void Dispatcher::RegisterNativeHandlers(ModuleSystem* module_system,
       scoped_ptr<NativeHandler>(new IdGeneratorCustomBindings(context)));
   module_system->RegisterNativeHandler(
       "runtime", scoped_ptr<NativeHandler>(new RuntimeCustomBindings(context)));
+
+  module_system->RegisterNativeHandler(
+      "nw_natives", scoped_ptr<NativeHandler>(new NWCustomBindings(context)));
 }
 
 bool Dispatcher::OnControlMessageReceived(const IPC::Message& message) {
@@ -897,6 +952,7 @@ void Dispatcher::WebKitInitialized() {
     func(extension_resource_scheme);
   }
 
+  g_set_uv_run_fn(nw_uv_run);
   // For extensions, we want to ensure we call the IdleHandler every so often,
   // even if the extension keeps up activity.
   if (set_idle_notifications_) {
@@ -920,6 +976,7 @@ void Dispatcher::WebKitInitialized() {
   EnableCustomElementWhiteList();
 
   is_webkit_initialized_ = true;
+
 }
 
 void Dispatcher::IdleNotification() {
@@ -1050,6 +1107,23 @@ void Dispatcher::OnLoaded(
     //    browser to figure this out itself - but again, cost/benefit.
     if (!extension_registry->Contains(extension->id()))
       extension_registry->Insert(extension);
+
+    if (extension->GetType() == Manifest::TYPE_NWJS_APP) {
+      std::string user_agent;
+      if (extension->manifest()->GetString("user-agent", &user_agent)) {
+        std::string name, version;
+        extension->manifest()->GetString("name", &name);
+        extension->manifest()->GetString("version", &version);
+        nw::SetUserAgentOverride(user_agent, name, version);
+
+        int dom_storage_quota_mb;
+        if (extension->manifest()->GetInteger("dom_storage_quota", &dom_storage_quota_mb)) {
+          content::DOMStorageMap::SetQuotaOverride(dom_storage_quota_mb * 1024 * 1024);
+        }
+      }
+      VLOG(1) << "NW: change working dir: " << extension->path().AsUTF8Unsafe();
+      base::SetCurrentDirectory(extension->path());
+    }
   }
 
   // Update the available bindings for all contexts. These may have changed if
@@ -1302,6 +1376,12 @@ void Dispatcher::UpdateBindingsForContext(ScriptContext* context) {
   v8::HandleScope handle_scope(context->isolate());
   v8::Context::Scope context_scope(context->v8_context());
 
+  bool nodejs_enabled = false;
+  if (context->extension()) {
+    nodejs_enabled = context->extension()->is_nwjs_app();
+    context->extension()->manifest()->GetBoolean(manifest_keys::kNWJSEnableNode, &nodejs_enabled);
+  }
+
   // TODO(kalman): Make the bindings registration have zero overhead then run
   // the same code regardless of context type.
   switch (context->context_type()) {
@@ -1334,6 +1414,9 @@ void Dispatcher::UpdateBindingsForContext(ScriptContext* context) {
           api_feature_provider->GetAllFeatureNames();
       for (const std::string& api_name : apis) {
         Feature* feature = api_feature_provider->GetFeature(api_name);
+        if (api_name.substr(0, 3) == "nw." && !nodejs_enabled)
+          continue;
+
         DCHECK(feature);
 
         // Internal APIs are included via require(api_name) from internal code
@@ -1530,7 +1613,13 @@ v8::Local<v8::Object> Dispatcher::GetOrCreateBindObjectIfAvailable(
   std::string ancestor_name;
   bool only_ancestor_available = false;
 
-  for (size_t i = 0; i < split.size() - 1; ++i) {
+  const char* prefix = nullptr;
+  int start = 0;
+  if (split[0] == "nw") {
+    prefix = "nw";
+    start = 1;
+  }
+  for (size_t i = start; i < split.size() - 1; ++i) {
     ancestor_name += (i ? "." : "") + split[i];
     if (api_feature_provider->GetFeature(ancestor_name) &&
         context->GetAvailability(ancestor_name).is_available() &&
@@ -1540,7 +1629,7 @@ v8::Local<v8::Object> Dispatcher::GetOrCreateBindObjectIfAvailable(
     }
 
     if (bind_object.IsEmpty()) {
-      bind_object = AsObjectOrEmpty(GetOrCreateChrome(context));
+      bind_object = AsObjectOrEmpty(GetOrCreateChrome(context, prefix));
       if (bind_object.IsEmpty())
         return v8::Local<v8::Object>();
     }
@@ -1553,7 +1642,7 @@ v8::Local<v8::Object> Dispatcher::GetOrCreateBindObjectIfAvailable(
   if (bind_name)
     *bind_name = split.back();
 
-  return bind_object.IsEmpty() ? AsObjectOrEmpty(GetOrCreateChrome(context))
+  return bind_object.IsEmpty() ? AsObjectOrEmpty(GetOrCreateChrome(context, prefix))
                                : bind_object;
 }
 

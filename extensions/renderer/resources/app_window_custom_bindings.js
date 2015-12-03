@@ -241,6 +241,9 @@ appWindow.registerCustomHook(function(bindingsAPI) {
     AppWindow.prototype.isFullscreen = function() {
       return appWindowData.fullscreen;
     };
+    AppWindow.prototype.isResizable = function() {
+      return appWindowData.resizable;
+    };
     AppWindow.prototype.isMinimized = function() {
       return appWindowData.minimized;
     };
@@ -311,6 +314,7 @@ appWindow.registerCustomHook(function(bindingsAPI) {
       minimized: params.minimized,
       maximized: params.maximized,
       alwaysOnTop: params.alwaysOnTop,
+      resizable: params.resizable,
       hasFrameColor: params.hasFrameColor,
       activeFrameColor: params.activeFrameColor,
       inactiveFrameColor: params.inactiveFrameColor,
@@ -325,6 +329,18 @@ function boundsEqual(bounds1, bounds2) {
     return false;
   return (bounds1.left == bounds2.left && bounds1.top == bounds2.top &&
           bounds1.width == bounds2.width && bounds1.height == bounds2.height);
+}
+
+function sizeEqual(bounds1, bounds2) {
+  if (!bounds1 || !bounds2)
+    return false;
+  return (bounds1.width == bounds2.width && bounds1.height == bounds2.height);
+}
+
+function posEqual(bounds1, bounds2) {
+  if (!bounds1 || !bounds2)
+    return false;
+  return (bounds1.left == bounds2.left && bounds1.top == bounds2.top);
 }
 
 function dispatchEventIfExists(target, name) {
@@ -347,8 +363,13 @@ function updateAppWindowProperties(update) {
 
   var currentWindow = currentAppWindow;
 
-  if (!boundsEqual(oldData.innerBounds, update.innerBounds))
+  if (!boundsEqual(oldData.innerBounds, update.innerBounds)) {
     dispatchEventIfExists(currentWindow, "onBoundsChanged");
+    if (!sizeEqual(oldData.innerBounds, update.innerBounds))
+      dispatchEventIfExists(currentWindow, "onResized");
+    if (!posEqual(oldData.innerBounds, update.innerBounds))
+      dispatchEventIfExists(currentWindow, "onMoved");
+  }
 
   if (!oldData.fullscreen && update.fullscreen)
     dispatchEventIfExists(currentWindow, "onFullscreened");

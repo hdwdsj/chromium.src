@@ -103,6 +103,12 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
   titlebar_background_view_.reset([view retain]);
 }
 
+- (BOOL)windowShouldClose:(id)sender {
+  if (appWindow_ && !appWindow_->NWCanClose())
+    return NO;
+  return YES;
+}
+
 - (void)windowWillClose:(NSNotification*)notification {
   if (appWindow_)
     appWindow_->WindowWillClose();
@@ -734,6 +740,10 @@ void NativeAppWindowCocoa::WindowWillClose() {
   app_window_->OnNativeClose();
 }
 
+bool NativeAppWindowCocoa::NWCanClose() {
+  return app_window_->NWCanClose();
+}
+
 void NativeAppWindowCocoa::WindowDidBecomeKey() {
   content::RenderWidgetHostView* rwhv =
       WebContents()->GetRenderWidgetHostView();
@@ -841,6 +851,25 @@ gfx::Size NativeAppWindowCocoa::GetContentMinimumSize() const {
 
 gfx::Size NativeAppWindowCocoa::GetContentMaximumSize() const {
   return size_constraints_.GetMaximumSize();
+}
+
+void NativeAppWindowCocoa::SetResizable(bool flag) {
+  is_resizable_ = flag;
+  gfx::Size min_size = size_constraints_.GetMinimumSize();
+  gfx::Size max_size = size_constraints_.GetMaximumSize();
+
+  shows_resize_controls_ =
+      is_resizable_ && !size_constraints_.HasFixedSize();
+  shows_fullscreen_controls_ =
+      is_resizable_ && !size_constraints_.HasMaximumSize() && has_frame_;
+
+  gfx::ApplyNSWindowSizeConstraints(window(), min_size, max_size,
+                                    shows_resize_controls_,
+                                    shows_fullscreen_controls_);
+}
+
+bool NativeAppWindowCocoa::IsResizable() const {
+  return is_resizable_;
 }
 
 void NativeAppWindowCocoa::SetContentSizeConstraints(

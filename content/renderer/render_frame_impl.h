@@ -575,6 +575,12 @@ class CONTENT_EXPORT RenderFrameImpl
       const blink::WebURL& frame_url,
       const blink::WebCString& data,
       blink::WebPageSerializerClient::PageSerializationStatus status) override;
+  virtual void willHandleNavigationPolicy(
+                                          blink::WebFrame*,
+                                          const blink::WebURLRequest&,
+                                          blink::WebNavigationPolicy*,
+                                          blink::WebString* manifest = NULL,
+                                          bool new_win = true);
 
   // Make this frame show an empty, unscriptable page.
   // TODO(nasko): Remove this method once swapped out state is no longer used.

@@ -16,6 +16,10 @@
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 
+#if defined(NWJS_SDK)
+#include "chrome/browser/devtools/devtools_window.h"
+#endif
+
 using extensions::AppWindow;
 
 namespace {
@@ -35,6 +39,9 @@ const AcceleratorMapping kAppWindowAcceleratorMap[] = {
   { ui::VKEY_W, ui::EF_CONTROL_DOWN, IDC_CLOSE_WINDOW },
   { ui::VKEY_W, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN, IDC_CLOSE_WINDOW },
   { ui::VKEY_F4, ui::EF_ALT_DOWN, IDC_CLOSE_WINDOW },
+#if defined(NWJS_SDK)
+  { ui::VKEY_F12, ui::EF_NONE, IDC_DEV_TOOLS_TOGGLE },
+#endif
 };
 
 // These accelerators will only be available in kiosk mode. These allow the
@@ -103,6 +110,10 @@ void ChromeNativeAppWindowViews::OnBeforeWidgetInit(
     const AppWindow::CreateParams& create_params,
     views::Widget::InitParams* init_params,
     views::Widget* widget) {
+}
+
+bool ChromeNativeAppWindowViews::NWCanClose() const {
+  return app_window()->NWCanClose();
 }
 
 void ChromeNativeAppWindowViews::OnBeforePanelWidgetInit(
@@ -302,6 +313,9 @@ bool ChromeNativeAppWindowViews::AcceleratorPressed(
       accelerator_table.find(accelerator);
   DCHECK(iter != accelerator_table.end());
   int command_id = iter->second;
+#if defined(NWJS_SDK)
+  content::WebContents* web_contents;
+#endif
   switch (command_id) {
     case IDC_CLOSE_WINDOW:
       Close();
@@ -318,7 +332,21 @@ bool ChromeNativeAppWindowViews::AcceleratorPressed(
       ui_zoom::PageZoom::Zoom(web_view()->GetWebContents(),
                               content::PAGE_ZOOM_IN);
       return true;
-    default:
+#if defined(NWJS_SDK)
+    case IDC_DEV_TOOLS:
+      web_contents = app_window()->web_contents();
+      if (web_contents) {
+        DevToolsWindow::OpenDevToolsWindow(web_contents);
+      }
+      return true;
+    case IDC_DEV_TOOLS_TOGGLE:
+      web_contents = app_window()->web_contents();
+      if (web_contents) {
+        DevToolsWindow::OpenDevToolsWindow(web_contents, DevToolsToggleAction::Toggle());
+      }
+      return true;
+#endif
+  default:
       NOTREACHED() << "Unknown accelerator sent to app window.";
   }
   return NativeAppWindowViews::AcceleratorPressed(accelerator);
