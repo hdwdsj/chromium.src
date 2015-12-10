@@ -133,7 +133,11 @@ public:
 
     // Cross-agents API
     FrameHost* frameHost();
-    LocalFrame* inspectedFrame() const { return m_inspectedFrame.get(); }
+    LocalFrame* inspectedFrame() const {
+        LocalFrame* f = m_inspectedFrame.get();
+        LocalFrame* jail = (LocalFrame*)f->getDevtoolsJail();
+        return jail ? jail : f;
+    }
     LocalFrame* findFrameWithSecurityOrigin(const String& originRawString);
     bool screencastEnabled();
 

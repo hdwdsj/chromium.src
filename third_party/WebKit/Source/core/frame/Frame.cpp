@@ -73,6 +73,8 @@ Frame::~Frame()
 #ifndef NDEBUG
     frameCounter.decrement();
 #endif
+    if (m_devJailOwner)
+        m_devJailOwner->setDevtoolsJail(NULL);
 }
 
 DEFINE_TRACE(Frame)
@@ -293,6 +295,8 @@ Frame::Frame(FrameClient* client, FrameHost* host, FrameOwner* owner)
     : m_treeNode(this)
     , m_host(host)
     , m_owner(owner)
+    , m_devtoolsJail(NULL)
+    , m_devJailOwner(NULL)
     , m_client(client)
     , m_frameID(generateFrameID())
     , m_isLoading(false)
@@ -311,6 +315,15 @@ Frame::Frame(FrameClient* client, FrameHost* host, FrameOwner* owner)
     } else {
         page()->setMainFrame(this);
     }
+}
+
+void Frame::setDevtoolsJail(Frame* iframe)
+{
+    m_devtoolsJail = iframe;
+    if (iframe)
+        iframe->m_devJailOwner = this;
+    else if (m_devtoolsJail)
+        m_devtoolsJail->m_devJailOwner = NULL;
 }
 
 } // namespace blink

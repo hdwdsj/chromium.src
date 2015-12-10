@@ -325,6 +325,10 @@ public:
 
     void setInputEventsTransformForEmulation(const IntSize&, float);
 
+    void setDevtoolsJail(WebFrame* iframe) {
+      frame()->setDevtoolsJail(iframe ? static_cast<const WebLocalFrameImpl*>(iframe)->frame() : NULL);
+    }
+    WebFrame* getDevtoolsJail() { return fromFrame((blink::LocalFrame*)frame()->getDevtoolsJail()); }
     static void selectWordAroundPosition(LocalFrame*, VisiblePosition);
 
     // Returns the text finder object if it already exists.

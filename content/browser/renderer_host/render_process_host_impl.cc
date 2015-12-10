@@ -221,6 +221,8 @@
 #define IntToStringType base::IntToString
 #endif
 
+#include "content/nw/src/common/shell_switches.h"
+
 namespace content {
 namespace {
 
@@ -1246,6 +1248,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
   // Propagate the following switches to the renderer command line (along
   // with any associated values) if present in the browser command line.
   static const char* const kSwitchNames[] = {
+    switches::kEnableSpellChecking,
     switches::kAllowLoopbackInPeerConnection,
     switches::kAudioBufferSize,
     switches::kBlinkPlatformLogChannels,

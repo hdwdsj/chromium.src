@@ -78,6 +78,8 @@ class NativeAppWindowCocoa : public extensions::NativeAppWindow,
   // Called when the window is about to be closed.
   void WindowWillClose();
 
+  bool NWCanClose();
+
   // Called when the window is focused.
   void WindowDidBecomeKey();
 
@@ -124,6 +126,8 @@ class NativeAppWindowCocoa : public extensions::NativeAppWindow,
  protected:
   // NativeAppWindow implementation.
   void SetFullscreen(int fullscreen_types) override;
+  void SetResizable(bool flag) override;
+  bool IsResizable() const override;
   bool IsFullscreenOrPending() const override;
   void UpdateWindowIcon() override;
   void UpdateWindowTitle() override;

@@ -209,6 +209,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   // by user.
   static void OnPageCloseCanceled(content::WebContents* contents);
 
+  void Close();
  private:
   friend class DevToolsWindowTesting;
 
@@ -272,7 +273,8 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
                           int opener_render_frame_id,
                           const std::string& frame_name,
                           const GURL& target_url,
-                          content::WebContents* new_contents) override;
+                          content::WebContents* new_contents,
+                          const base::string16& nw_window_manifest) override;
   void CloseContents(content::WebContents* source) override;
   void ContentsZoomChange(bool zoom_in) override;
   void BeforeUnloadFired(content::WebContents* tab,

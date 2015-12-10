@@ -132,6 +132,26 @@ function sendRequest(functionName, args, argSchemas, optArgs) {
   requests[requestId] = request;
 }
 
+function sendRequestSync(functionName, args, argSchemas, optArgs) {
+  if (!optArgs)
+    optArgs = {};
+  var request = prepareRequest(args, argSchemas);
+  request.stack = optArgs.stack || exceptionHandler.getExtensionStackTrace();
+  if (optArgs.customCallback) {
+    request.customCallback = optArgs.customCallback;
+  }
+
+  //var requestId = natives.GetNextRequestId();
+  //request.id = requestId;
+
+  var hasCallback = request.callback || optArgs.customCallback;
+  return natives.StartRequestSync(functionName,
+                        request.args,
+                        hasCallback,
+                        optArgs.forIOThread,
+                        optArgs.preserveNullInObjects);
+}
+
 function getCalledSendRequest() {
   return calledSendRequest;
 }
@@ -141,6 +161,7 @@ function clearCalledSendRequest() {
 }
 
 exports.sendRequest = sendRequest;
+exports.sendRequestSync = sendRequestSync;
 exports.getCalledSendRequest = getCalledSendRequest;
 exports.clearCalledSendRequest = clearCalledSendRequest;
 exports.safeCallbackApply = safeCallbackApply;

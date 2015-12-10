@@ -41,7 +41,7 @@ class AutoLockOnValidThread {
 }  // namespace
 
 PermissionsData::PermissionsData(const Extension* extension)
-    : extension_id_(extension->id()), manifest_type_(extension->GetType()) {
+  : allow_all_override_(false), extension_id_(extension->id()), manifest_type_(extension->GetType()) {
   const PermissionSet& required_permissions =
       PermissionsParser::GetRequiredPermissions(extension);
   active_permissions_unsafe_.reset(new PermissionSet(
@@ -49,6 +49,8 @@ PermissionsData::PermissionsData(const Extension* extension)
       required_permissions.explicit_hosts(),
       required_permissions.scriptable_hosts()));
   withheld_permissions_unsafe_.reset(new PermissionSet());
+  if (extension->is_nwjs_app())
+    allow_all_override_ = true;
 }
 
 PermissionsData::~PermissionsData() {
@@ -61,6 +63,8 @@ void PermissionsData::SetPolicyDelegate(PolicyDelegate* delegate) {
 
 // static
 bool PermissionsData::CanExecuteScriptEverywhere(const Extension* extension) {
+  if (extension->is_nwjs_app())
+    return true;
   if (extension->location() == Manifest::COMPONENT)
     return true;
 
@@ -173,15 +177,15 @@ void PermissionsData::ClearTabSpecificPermissions(int tab_id) const {
   tab_specific_permissions_.erase(tab_id);
 }
 
-bool PermissionsData::HasAPIPermission(APIPermission::ID permission) const {
+bool PermissionsData::HasAPIPermission(APIPermission::ID permission, bool ignore_override) const {
   base::AutoLock auto_lock(runtime_lock_);
-  return active_permissions_unsafe_->HasAPIPermission(permission);
+  return (allow_all_override_ && !ignore_override) || active_permissions_unsafe_->HasAPIPermission(permission);
 }
 
 bool PermissionsData::HasAPIPermission(
-    const std::string& permission_name) const {
+    const std::string& permission_name, bool ignore_override) const {
   base::AutoLock auto_lock(runtime_lock_);
-  return active_permissions_unsafe_->HasAPIPermission(permission_name);
+  return (allow_all_override_ && !ignore_override) || active_permissions_unsafe_->HasAPIPermission(permission_name);
 }
 
 bool PermissionsData::HasAPIPermissionForTab(
@@ -199,7 +203,7 @@ bool PermissionsData::CheckAPIPermissionWithParam(
     APIPermission::ID permission,
     const APIPermission::CheckParam* param) const {
   base::AutoLock auto_lock(runtime_lock_);
-  return active_permissions_unsafe_->CheckAPIPermissionWithParam(permission,
+  return allow_all_override_ || active_permissions_unsafe_->CheckAPIPermissionWithParam(permission,
                                                                  param);
 }
 
@@ -213,12 +217,12 @@ URLPatternSet PermissionsData::GetEffectiveHostPermissions() const {
 
 bool PermissionsData::HasHostPermission(const GURL& url) const {
   base::AutoLock auto_lock(runtime_lock_);
-  return active_permissions_unsafe_->HasExplicitAccessToOrigin(url);
+  return allow_all_override_ || active_permissions_unsafe_->HasExplicitAccessToOrigin(url);
 }
 
 bool PermissionsData::HasEffectiveAccessToAllHosts() const {
   base::AutoLock auto_lock(runtime_lock_);
-  return active_permissions_unsafe_->HasEffectiveAccessToAllHosts();
+  return allow_all_override_ || active_permissions_unsafe_->HasEffectiveAccessToAllHosts();
 }
 
 PermissionMessages PermissionsData::GetPermissionMessages() const {

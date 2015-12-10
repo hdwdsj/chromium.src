@@ -66,6 +66,9 @@ public:
 
     DECLARE_VIRTUAL_TRACE();
 
+    void setDevtoolsJail(Frame* iframe);
+    Frame* getDevtoolsJail() { return m_devtoolsJail; }
+
     virtual bool isLocalFrame() const { return false; }
     virtual bool isRemoteFrame() const { return false; }
 
@@ -140,6 +143,8 @@ protected:
     RawPtrWillBeMember<FrameOwner> m_owner;
 
 private:
+    Frame* m_devtoolsJail;
+    Frame* m_devJailOwner;
     FrameClient* m_client;
     // Needed to identify Frame Timing requests.
     int64_t m_frameID;

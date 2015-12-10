@@ -20,6 +20,11 @@ class HistogramSynchronizer;
 class NativeBackendKWallet;
 class ScopedAllowWaitForLegacyWebViewApi;
 
+namespace extensions {
+class NwAppSetProxyConfigFunction;
+class ContentVerifier;
+}
+
 namespace cc {
 class CompletionEvent;
 class TaskGraphRunner;
@@ -194,6 +199,9 @@ class BASE_EXPORT ThreadRestrictions {
   friend class ThreadTestHelper;
   friend class PlatformThread;
   friend class android::JavaHandlerThread;
+
+  friend class extensions::NwAppSetProxyConfigFunction;
+  friend class extensions::ContentVerifier;
 
   // END ALLOWED USAGE.
   // BEGIN USAGE THAT NEEDS TO BE FIXED.

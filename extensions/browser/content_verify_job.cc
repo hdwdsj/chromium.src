@@ -54,6 +54,23 @@ ContentVerifyJob::ContentVerifyJob(ContentHashReader* hash_reader,
   thread_checker_.DetachFromThread();
 }
 
+ContentVerifyJob::ContentVerifyJob(ContentHashReader* hash_reader,
+                                   const FailureCallback& failure_callback,
+                                   const ReadyCallback& ready_callback)
+    : done_reading_(false),
+      hashes_ready_(false),
+      total_bytes_read_(0),
+      current_block_(0),
+      current_hash_byte_count_(0),
+      hash_reader_(hash_reader),
+      failure_callback_(failure_callback),
+      ready_callback_(ready_callback),
+      failed_(false) {
+  // It's ok for this object to be constructed on a different thread from where
+  // it's used.
+  thread_checker_.DetachFromThread();
+}
+
 ContentVerifyJob::~ContentVerifyJob() {
   UMA_HISTOGRAM_COUNTS("ExtensionContentVerifyJob.TimeSpentUS",
                        time_spent_.InMicroseconds());
@@ -138,6 +155,8 @@ void ContentVerifyJob::DoneReading() {
     else if (g_test_observer)
       g_test_observer->JobFinished(hash_reader_->extension_id(),
                                    hash_reader_->relative_path(), failed_);
+    else if (!success_callback_.is_null())
+      success_callback_.Run();
   }
 }
 
@@ -163,6 +182,8 @@ void ContentVerifyJob::OnHashesReady(bool success) {
   if (!success && !g_test_delegate) {
     if (!hash_reader_->content_exists()) {
       // Ignore verification of non-existent resources.
+      if (!success_callback_.is_null())
+        success_callback_.Run();
       return;
     } else if (hash_reader_->have_verified_contents() &&
                hash_reader_->have_computed_hashes()) {
@@ -188,6 +209,9 @@ void ContentVerifyJob::OnHashesReady(bool success) {
                                    hash_reader_->relative_path(), failed_);
     }
   }
+  if (!ready_callback_.is_null()) {
+    ready_callback_.Run(this);
+  }
 }
 
 // static
@@ -207,7 +231,7 @@ void ContentVerifyJob::DispatchFailureCallback(FailureReason reason) {
     VLOG(1) << "job failed for " << hash_reader_->extension_id() << " "
             << hash_reader_->relative_path().MaybeAsASCII()
             << " reason:" << reason;
-    failure_callback_.Run(reason);
+    failure_callback_.Run(reason, this);
     failure_callback_.Reset();
   }
   if (g_test_observer)

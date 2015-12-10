@@ -768,6 +768,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   bool IsModal() const override;
   bool IsDialogBox() const override;
   bool CanActivate() const override;
+  bool NWCanClose() const override;
   bool IsInactiveRenderingDisabled() const override;
   void EnableInactiveRendering() override;
   void OnNativeWidgetActivationChanged(bool active) override;

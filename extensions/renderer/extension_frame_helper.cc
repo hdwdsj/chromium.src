@@ -18,6 +18,8 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 
+#include "content/nw/src/nw_content.h"
+
 namespace extensions {
 
 namespace {
@@ -104,6 +106,13 @@ void ExtensionFrameHelper::DidCreateDocumentElement() {
   did_create_current_document_element_ = true;
   extension_dispatcher_->DidCreateDocumentElement(
       render_frame()->GetWebFrame());
+  nw::DocumentHook2(true, render_frame(), extension_dispatcher_);
+}
+
+void ExtensionFrameHelper::DidFinishDocumentLoad() {
+  extension_dispatcher_->DidFinishDocumentLoad(
+      render_frame()->GetWebFrame());
+  nw::DocumentHook2(false, render_frame(), extension_dispatcher_);
 }
 
 void ExtensionFrameHelper::DidCreateNewDocument() {

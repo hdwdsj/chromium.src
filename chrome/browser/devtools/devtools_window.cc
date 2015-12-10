@@ -909,7 +909,8 @@ void DevToolsWindow::WebContentsCreated(WebContents* source_contents,
                                         int opener_render_frame_id,
                                         const std::string& frame_name,
                                         const GURL& target_url,
-                                        WebContents* new_contents) {
+                                        WebContents* new_contents,
+                                        const base::string16& nw_window_manifest) {
   if (target_url.SchemeIs(content::kChromeDevToolsScheme) &&
       target_url.path().rfind("toolbox.html") != std::string::npos) {
     CHECK(can_dock_);
@@ -1126,6 +1127,10 @@ void DevToolsWindow::RenderProcessGone(bool crashed) {
   } else if (browser_ && crashed) {
     browser_->window()->Close();
   }
+}
+
+void DevToolsWindow::Close() {
+  browser_->window()->Close();
 }
 
 void DevToolsWindow::OnLoadCompleted() {
